@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin, urldefrag # Additional URL implementation
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -15,7 +15,40 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+    links = []
+
+    # Only process valid responses
+    if resp is None or getattr(resp, "status", None) != 200:
+        return links
+
+    raw = getattr(resp, "raw_response", None)
+    if raw is None or getattr(raw, "content", None) is None:
+        return links
+
+    content = raw.content
+    if isinstance(content, bytes):
+        html = content.decode("utf-8", errors="ignore")
+    else:
+        html = str(content)
+
+    base_url = getattr(resp, "url", None) or url
+
+    # From HREFs, find ALL associated links with the page.
+    # Format:
+    hrefs = re.findall(r'href=["\'](.*?)["\']', html, re.IGNORECASE)
+
+    for href in hrefs:
+        # Convert relative to absolute links
+        # /people.html -> https://www.ics.uci.edu/about/people.html
+        abs_url = urljoin(base_url, href)
+
+        # Remove fragments (#...)
+        abs_url, _ = urldefrag(abs_url)
+
+        links.append(abs_url)
+
+    return links
+
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -25,7 +58,24 @@ def is_valid(url):
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
-        return not re.match(
+        # Must have hostname
+        host = parsed.hostname
+        if not host:
+            return False
+        host = host.lower()
+
+        # Domain restriction
+        allowed = (
+            host.endswith(".ics.uci.edu")
+            or host.endswith(".cs.uci.edu")
+            or host.endswith(".informatics.uci.edu")
+            or host.endswith(".stat.uci.edu")
+        )
+        if not allowed:
+            return False
+
+        # Reject bad file extensions
+        if re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
             + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
@@ -33,8 +83,24 @@ def is_valid(url):
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
+            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$",
+            parsed.path.lower(),
+        ):
+            return False
 
+        # Preventing SUPER long URLs. Could be possible spam
+        if len(url) > 300:
+            return False
+
+        # Prevent crawler from accesing too many query params
+        if parsed.query.count("&") >= 6:
+            return False
+
+        # Prevent infinite paging traps (i.e. page=999999 etc.). Not likely.
+        if re.search(r"(page|paged|start|offset)=\d{4,}", parsed.query.lower()):
+            return False
+
+        return True
     except TypeError:
         print ("TypeError for ", parsed)
         raise
