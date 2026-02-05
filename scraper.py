@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin, urldefrag
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -15,7 +15,58 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+    links = set()
+    
+    # Check response code for OK, return empty list if error
+    if resp.status != 200 or not resp.raw_response:
+        return list()
+    
+    try:
+        # Decode the content
+        content = resp.raw_response.content
+        if isinstance(content, bytes):
+            try:
+                content = content.decode('utf-8', errors='ignore')
+            except:
+                content = str(content)
+        
+        # Extract URLs from hrefs in <a> tags
+        href_pattern = r'href=["\']?([^"\' >]+)["\']?'
+        href_list = re.findall(href_pattern, content)
+        
+        # Get the base URL for resolving relative URLs
+        base_url = resp.url if hasattr(resp, 'url') and resp.url else url
+        
+        # Process each link found
+        for href in href_list:
+            try:
+                # Skip empty or fragment-only links
+                if not href or not href.strip():
+                    continue
+                
+                # Skip certain protocols
+                if href.startswith(('#', 'javascript:', 'mailto:', 'tel:', 'data:')):
+                    continue
+                
+                # Convert relative URLs to absolute URLs
+                absolute_url = urljoin(base_url, href)
+                
+                # Remove fragments
+                absolute_url = urldefrag(absolute_url)[0]
+                
+                # Normalize the URL
+                absolute_url = absolute_url.strip()
+                
+                # Filter using is_valid before adding
+                if is_valid(absolute_url):
+                    links.add(absolute_url)
+            except Exception:
+                # Skip malformed URLs
+                continue
+                
+        return list(links)
+    except Exception:
+        return list()
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -23,8 +74,33 @@ def is_valid(url):
     # There are already some conditions that return False.
     try:
         parsed = urlparse(url)
+        
+        # Check URL scheme
         if parsed.scheme not in set(["http", "https"]):
             return False
+        
+        # Check if URL is empty
+        if not url or not url.strip():
+            return False
+        
+        # Reject certain protocols/schemes embedded in URL
+        if url.startswith(('javascript:', 'mailto:', 'tel:', 'data:')):
+            return False
+        
+        # Check if domain is in allowed domains
+        allowed_domains = [
+            r'.*\.ics\.uci\.edu',
+            r'.*\.cs\.uci\.edu',
+            r'.*\.informatics\.uci\.edu',
+            r'.*\.stat\.uci\.edu'
+        ]
+        
+        # Check if the netloc matches any allowed domain
+        domain_valid = any(re.match(domain, parsed.netloc) for domain in allowed_domains)
+        if not domain_valid:
+            return False
+        
+        # Check file extensions that should not be crawled
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
@@ -36,5 +112,7 @@ def is_valid(url):
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
 
     except TypeError:
-        print ("TypeError for ", parsed)
+        print ("TypeError for ", url)
         raise
+
+
