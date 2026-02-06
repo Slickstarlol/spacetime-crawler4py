@@ -137,4 +137,3 @@ def is_valid(url):
 	except Exception:
 		raise
 
-
