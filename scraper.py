@@ -1,5 +1,6 @@
 import re
-from urllib.parse import urlparse, urljoin, urldefrag # Additional URL implementation
+from urllib.parse import urlparse, urljoin, urldefrag
+from bs4 import BeautifulSoup
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -15,40 +16,88 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    links = []
+    links = set()
+    
+    # Check response code for OK, return empty list if error
+    if resp.status != 200 or not resp.raw_response:
+        return list()
+    
+    try:
+        # Decode the content
+        content = resp.raw_response.content
+        if isinstance(content, bytes):
+            try:
+                content = content.decode('utf-8', errors='ignore')
+            except:
+                content = str(content)
+        
+        # Skip extremely large pages that might be traps
+        if len(content) > 10 * 1024 * 1024:  # 10 MB limit
+            return list()
+        
+        # Parse HTML using BeautifulSoup for robustness
+        try:
+            soup = BeautifulSoup(content, 'html.parser')
+        except:
+            # Fallback to regex if BeautifulSoup fails
+            href_pattern = r'href=["\']?([^"\' >]+)["\']?'
+            href_list = re.findall(href_pattern, content)
+            soup = None
+        
+        # Get the base URL for resolving relative URLs
+        base_url = resp.url if hasattr(resp, 'url') and resp.url else url
+        
+        # Extract links using BeautifulSoup if available
+        if soup:
+            for link in soup.find_all('a', href=True):
+                href = link['href'].strip()
+                if process_href(href, base_url, links):
+                    pass
+        else:
+            # Use regex fallback
+            for href in href_list:
+                if process_href(href, base_url, links):
+                    pass
+                
+        return list(links)
+    except Exception:
+        return list()
 
-    # Only process valid responses
-    if resp is None or getattr(resp, "status", None) != 200:
-        return links
-
-    raw = getattr(resp, "raw_response", None)
-    if raw is None or getattr(raw, "content", None) is None:
-        return links
-
-    content = raw.content
-    if isinstance(content, bytes):
-        html = content.decode("utf-8", errors="ignore")
-    else:
-        html = str(content)
-
-    base_url = getattr(resp, "url", None) or url
-
-    # From HREFs, find ALL associated links with the page.
-    # Format:
-    hrefs = re.findall(r'href=["\'](.*?)["\']', html, re.IGNORECASE)
-
-    for href in hrefs:
-        # Convert relative to absolute links
-        # /people.html -> https://www.ics.uci.edu/about/people.html
-        abs_url = urljoin(base_url, href)
-
-        # Remove fragments (#...)
-        abs_url, _ = urldefrag(abs_url)
-
-        links.append(abs_url)
-
-    return links
-
+def process_href(href, base_url, links):
+    """Helper function to process and validate a single href"""
+    try:
+        # Skip empty or fragment-only links
+        if not href or not href.strip():
+            return False
+        
+        href = href.strip()
+        
+        # Skip certain protocols
+        if href.startswith(('#', 'javascript:', 'mailto:', 'tel:', 'data:')):
+            return False
+        
+        # Convert relative URLs to absolute URLs
+        absolute_url = urljoin(base_url, href)
+        
+        # Remove fragments
+        absolute_url = urldefrag(absolute_url)[0]
+        
+        # Normalize the URL (lower case, strip)
+        absolute_url = absolute_url.strip()
+        
+        # Additional validation: check URL length
+        if len(absolute_url) > 2048:
+            return False
+        
+        # Filter using is_valid before adding
+        if is_valid(absolute_url):
+            links.add(absolute_url)
+            return True
+    except Exception:
+        # Skip malformed URLs
+        return False
+    
+    return False
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -56,26 +105,34 @@ def is_valid(url):
     # There are already some conditions that return False.
     try:
         parsed = urlparse(url)
+        
+        # Check URL scheme
         if parsed.scheme not in set(["http", "https"]):
             return False
-        # Must have hostname
-        host = parsed.hostname
-        if not host:
+        
+        # Check if URL is empty
+        if not url or not url.strip():
             return False
-        host = host.lower()
-
-        # Domain restriction
-        allowed = (
-            host.endswith(".ics.uci.edu")
-            or host.endswith(".cs.uci.edu")
-            or host.endswith(".informatics.uci.edu")
-            or host.endswith(".stat.uci.edu")
-        )
-        if not allowed:
+        
+        # Reject certain protocols/schemes embedded in URL
+        if url.startswith(('javascript:', 'mailto:', 'tel:', 'data:')):
             return False
-
-        # Reject bad file extensions
-        if re.match(
+        
+        # Check if domain is in allowed domains
+        allowed_domains = [
+            r'.*\.ics\.uci\.edu',
+            r'.*\.cs\.uci\.edu',
+            r'.*\.informatics\.uci\.edu',
+            r'.*\.stat\.uci\.edu'
+        ]
+        
+        # Check if the netloc matches any allowed domain
+        domain_valid = any(re.match(domain, parsed.netloc) for domain in allowed_domains)
+        if not domain_valid:
+            return False
+        
+        # Check file extensions that should not be crawled
+        return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
             + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
@@ -83,24 +140,10 @@ def is_valid(url):
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$",
-            parsed.path.lower(),
-        ):
-            return False
+            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
 
-        # Preventing SUPER long URLs. Could be possible spam
-        if len(url) > 300:
-            return False
-
-        # Prevent crawler from accesing too many query params
-        if parsed.query.count("&") >= 6:
-            return False
-
-        # Prevent infinite paging traps (i.e. page=999999 etc.). Not likely.
-        if re.search(r"(page|paged|start|offset)=\d{4,}", parsed.query.lower()):
-            return False
-
-        return True
     except TypeError:
-        print ("TypeError for ", parsed)
+        print ("TypeError for ", url)
         raise
+
+
