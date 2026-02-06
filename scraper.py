@@ -1,5 +1,6 @@
 import re
 from urllib.parse import urlparse, urljoin, urldefrag
+from bs4 import BeautifulSoup
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -30,43 +31,73 @@ def extract_next_links(url, resp):
             except:
                 content = str(content)
         
-        # Extract URLs from hrefs in <a> tags
-        href_pattern = r'href=["\']?([^"\' >]+)["\']?'
-        href_list = re.findall(href_pattern, content)
+        # Skip extremely large pages that might be traps
+        if len(content) > 10 * 1024 * 1024:  # 10 MB limit
+            return list()
+        
+        # Parse HTML using BeautifulSoup for robustness
+        try:
+            soup = BeautifulSoup(content, 'html.parser')
+        except:
+            # Fallback to regex if BeautifulSoup fails
+            href_pattern = r'href=["\']?([^"\' >]+)["\']?'
+            href_list = re.findall(href_pattern, content)
+            soup = None
         
         # Get the base URL for resolving relative URLs
         base_url = resp.url if hasattr(resp, 'url') and resp.url else url
         
-        # Process each link found
-        for href in href_list:
-            try:
-                # Skip empty or fragment-only links
-                if not href or not href.strip():
-                    continue
-                
-                # Skip certain protocols
-                if href.startswith(('#', 'javascript:', 'mailto:', 'tel:', 'data:')):
-                    continue
-                
-                # Convert relative URLs to absolute URLs
-                absolute_url = urljoin(base_url, href)
-                
-                # Remove fragments
-                absolute_url = urldefrag(absolute_url)[0]
-                
-                # Normalize the URL
-                absolute_url = absolute_url.strip()
-                
-                # Filter using is_valid before adding
-                if is_valid(absolute_url):
-                    links.add(absolute_url)
-            except Exception:
-                # Skip malformed URLs
-                continue
+        # Extract links using BeautifulSoup if available
+        if soup:
+            for link in soup.find_all('a', href=True):
+                href = link['href'].strip()
+                if process_href(href, base_url, links):
+                    pass
+        else:
+            # Use regex fallback
+            for href in href_list:
+                if process_href(href, base_url, links):
+                    pass
                 
         return list(links)
     except Exception:
         return list()
+
+def process_href(href, base_url, links):
+    """Helper function to process and validate a single href"""
+    try:
+        # Skip empty or fragment-only links
+        if not href or not href.strip():
+            return False
+        
+        href = href.strip()
+        
+        # Skip certain protocols
+        if href.startswith(('#', 'javascript:', 'mailto:', 'tel:', 'data:')):
+            return False
+        
+        # Convert relative URLs to absolute URLs
+        absolute_url = urljoin(base_url, href)
+        
+        # Remove fragments
+        absolute_url = urldefrag(absolute_url)[0]
+        
+        # Normalize the URL (lower case, strip)
+        absolute_url = absolute_url.strip()
+        
+        # Additional validation: check URL length
+        if len(absolute_url) > 2048:
+            return False
+        
+        # Filter using is_valid before adding
+        if is_valid(absolute_url):
+            links.add(absolute_url)
+            return True
+    except Exception:
+        # Skip malformed URLs
+        return False
+    
+    return False
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
