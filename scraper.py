@@ -124,7 +124,7 @@ def is_valid(url):
         # Check for calendar pattern
         calendar_pattern = r'(/\d{4}/){2,}'				# Repeated two repeated /YYYY/... patterns
         calendar_pattern2 = r'(/\d{4}/\d{2}/\d{2}/)'	# /YYYY/MM/DD
-        if re.search(calendar_pattern, parsed.path) or re.search(calendar_pattern2):
+        if re.search(calendar_pattern, parsed.path) or re.search(calendar_pattern2, parsed.path):
             return False
         
         # Check query length
