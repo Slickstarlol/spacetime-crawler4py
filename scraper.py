@@ -1,6 +1,7 @@
 import re
 from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
+import content_filter
 
 MAX_PAGE_SIZE = 10 * 1024 * 1024    # 10 MB
 MIN_PAGE_SIZE = 100                 # 100 bytes
