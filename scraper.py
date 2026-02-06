@@ -2,6 +2,8 @@ import re
 from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
 
+import content_filter
+
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
@@ -35,6 +37,10 @@ def extract_next_links(url, resp):
         if len(content) > 10 * 1024 * 1024:  # 10 MB limit
             return list()
         
+        # Filter and check duplicate/near-duplicate pages
+        if not content_filter.should_expand_page(content):
+            return list()
+
         # Parse HTML using BeautifulSoup for robustness
         try:
             soup = BeautifulSoup(content, 'html.parser')
