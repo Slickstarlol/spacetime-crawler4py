@@ -102,6 +102,29 @@ def is_near_duplicate(sh: int, *, threshold: int = 4) -> bool:
             return True
     return False
 
+# For low-information webpages
+def is_low_information(text: str, tokens: list[str]) -> bool:
+    # 
+    ''' Contemplating whether to restrict text count, due to menu pages
+    if len(text) < 200:
+        return True
+    '''
+    if len(tokens) < 80:
+        return True
+
+    # Check for reptition
+    counts = Counter(tokens)
+    most_common = counts.most_common(1)[0][1]
+    if most_common / max(1, len(tokens)) > 0.25:
+        return True
+
+    # Check for vocabulary usage
+    unique_ratio = len(counts) / max(1, len(tokens))
+    if unique_ratio < 0.12:
+        return True
+
+    return False
+    
 
 # Combine all filters to check web-pages
 def should_expand_page(soup: BeautifulSoup, url, *, simhash_threshold: int = 4) -> bool:
@@ -111,6 +134,9 @@ def should_expand_page(soup: BeautifulSoup, url, *, simhash_threshold: int = 4) 
     """
     text = visible_text_from_html(soup)
     tokens = tokenize_text(text)
+
+    if is_low_information(text, tokens):
+        return False
 
     ch = content_checksum(text)
     if ch in SEEN_CONTENT_HASHES:

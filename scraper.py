@@ -3,6 +3,8 @@ from urllib.parse import urlparse, urljoin, urldefrag, parse_qs
 from bs4 import BeautifulSoup
 import content_filter
 
+import analytics
+
 MAX_PAGE_SIZE = 10 * 1024 * 1024    # 10 MB
 MIN_PAGE_SIZE = 100                 # 100 bytes
 
@@ -77,7 +79,9 @@ def extract_next_links(url, resp) -> list[str]:
 		# Tokenize and filter webpages for duplicates
 		if not content_filter.should_expand_page(soup, resp.url):
 			return list()
-				
+
+		# Record analytics for this accepted page
+		analytics.record_page(resp.url, content)
 		# Get the base URL to resolve relative URLs
 		base_url = resp.url if hasattr(resp, 'url') and resp.url else url
 		
