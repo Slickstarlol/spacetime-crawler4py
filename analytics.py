@@ -1,5 +1,5 @@
 from collections import Counter, defaultdict
-import content_filter
+from content_filter import visible_text_from_html, tokenize_text
 
 # Global variables
 
@@ -58,8 +58,8 @@ def record_page(url: str, html: str) -> None:
         SUBDOMAIN_PAGES[host].add(clean_url)
 
     # HTML -> visible text -> tokens
-    text = content_filter.visible_text_from_html(html)
-    tokens = content_filter.tokenize_text(text)
+    text = visible_text_from_html(html)
+    tokens = tokenize_text(text)
 
     # 2) Longest page
     wc = len(tokens)

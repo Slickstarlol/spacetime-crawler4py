@@ -104,7 +104,7 @@ def is_near_duplicate(sh: int, *, threshold: int = 4) -> bool:
 
 # For low-information webpages
 def is_low_information(text: str, tokens: list[str]) -> bool:
-    # 
+    
     ''' Contemplating whether to restrict text count, due to menu pages
     if len(text) < 200:
         return True

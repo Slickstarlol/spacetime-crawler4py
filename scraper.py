@@ -2,7 +2,6 @@ import re
 from urllib.parse import urlparse, urljoin, urldefrag, parse_qs
 from bs4 import BeautifulSoup
 import content_filter
-
 import analytics
 
 MAX_PAGE_SIZE = 10 * 1024 * 1024    # 10 MB
@@ -129,6 +128,9 @@ def is_valid(url):
 		
 		# Check if the netloc matches valid domain
 		hostname = parsed.hostname
+		if not hostname:
+			print(f"No hostname found for: {url}")
+			return False
 		domain_valid = any(hostname.endswith(domain) for domain in VALID_DOMAINS)
 		if not domain_valid:
 			#print(f"Invalid domain: {hostname}")												# DEBUGGING
