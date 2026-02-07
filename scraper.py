@@ -7,20 +7,20 @@ MAX_PAGE_SIZE = 10 * 1024 * 1024    # 10 MB
 MIN_PAGE_SIZE = 100                 # 100 bytes
 
 MAX_PATH_DEPTH = 6
-BAD_PATH_KEYS = {"login", "logout", "signup", "signout", "register", "search", "history", 
+BAD_PATH_KEYS = {"login", "logout", "signup", "sign_up", "signin", "sign_in" "signout", "register", "search", "history", 
 				 "diff", "media", "file", "image", "print", "action", "admin", "auth"}
 
 MAX_QUERY_LEN = 5
 BAD_QUERY_KEYS = {"ns", "image", "tab", "tab_files", "tab_details", 
 				  "do", "diff", "sort", "filter", "view", "action",
 				  "auth", "from", "precision", "token", "filter",
-				  "search"}
+				  "search", "share", "outlook-cal", "ical", "keywords"}
 
-BAD_EXTENSIONS_REGEX = (r".*\.(7z|arff|avi|bin|bmp|bz2|cnf|css|csv|"
-						r"dat|data|dll|dmg|doc|docx|eps|epub|exe|"
-						r"gif|gz|ico|iso|jar|jpe?g|jpg|js|m4v|mid|"
+BAD_EXTENSIONS_REGEX = (r".*\.(7z|arff|avi|bib|bin|bmp|bz2|c|cnf|css|csv|"
+						r"dat|data|dll|dmg|doc|docx|eps|epub|exe|h|"
+						r"gif|gz|ico|iso|jar|jpe?g|jpg|js|lif|m4v|mid|"
 						r"mkv|mov|mp2|mp3|mp4|mpeg|msi|mso|names|"
-						r"odc|ogg|ogv|pdf|png|ppt|pptx|ps|psd|ram|"
+						r"odc|ogg|ogv|pdf|png|ppt|pptx|ps|psd|py|ram|"
 						r"rar|rm|rtf|sas|sha1|smil|swf|tar|tex|tgz|"
 						r"thmx|tiff?|txt|wav|wma|wmv|xls|xlsx|xml|zip)$")
 
@@ -131,7 +131,7 @@ def is_valid(url):
 			return False
 		
 		# Check path depth
-		path_keys = parsed.path.split('/')
+		path_keys = parsed.path.lower().split('/')
 		if len(path_keys) > MAX_PATH_DEPTH:
 			#print(f"Path too long: {url}")												# DEBUGGING
 			return False
@@ -150,7 +150,7 @@ def is_valid(url):
 		
 		# Check query parameters and actions
 		if parsed.query:
-			params = parse_qs(parsed.query)
+			params = parse_qs(parsed.query.lower())
 			if any(key in BAD_QUERY_KEYS for key in params):
 				#print(f"Bad query key: {url}")											# DEBUGGING
 				return False
