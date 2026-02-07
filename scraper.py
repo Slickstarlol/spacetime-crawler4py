@@ -11,7 +11,7 @@ MAX_PATH_DEPTH = 10
 MAX_QUERY_LEN = 5
 
 BAD_EXTENSIONS_REGEX = (r".*\.(css|js|bmp|gif|jpe?g|ico"
-                        + r"|png|tiff?|mid|mp2|mp3|mp4"
+                        + r"|png|tiff?|mid|mp2|mp3|mp4|jpg"
                         + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
                         + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
                         + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
@@ -60,12 +60,12 @@ def extract_next_links(url, resp) -> list[str]:
             except:
                 content = str(content)
 
-        # Tokenize and filter webpages for duplicates
-        if not content_filter.should_expand_page(content):
-            return list()
-    
         soup = BeautifulSoup(content, 'html.parser')
-        
+
+        # Tokenize and filter webpages for duplicates
+        if not content_filter.should_expand_page(soup):
+            return list()
+                
         # Get the base URL to resolve relative URLs
         base_url = resp.url if hasattr(resp, 'url') and resp.url else url
         
@@ -79,8 +79,7 @@ def extract_next_links(url, resp) -> list[str]:
             absolute_url = urljoin(base_url, href)
             
             absolute_url = urldefrag(absolute_url)[0]
-            print(f"URL: {absolute_url}")					# DEBUGGING ########################
-
+            # print(f"URL: {absolute_url}")					# DEBUGGING
 
             links.add(absolute_url)
         
@@ -141,4 +140,5 @@ def is_valid(url):
     
     except Exception:
         raise
+
 
