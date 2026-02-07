@@ -10,15 +10,26 @@ SEEN_SIMHASHES = set()        # For near duplicate
 
 # Stop word filtering
 STOP_WORDS = {
-    "the","and","is","of","to","in","for","with","that","this","on","at","by","from",
-    "as","an","are","be","or","it","was","were","has","had","have","not","but","we",
-    "they","their","you","your","i","a","its","our","can","will","may","if","do","does"
+    "about", "above", "after", "again", "against","aren't", "because", "been", 
+    "before", "being", "below", "between", "both", "can't", "cannot", "could", 
+    "couldn't", "didn't", "does", "doesn't", "doing", "don't", "down", "during", 
+    "each", "from", "further","hadn't", "hasn't", "have", "haven't", "having", 
+    "he'd", "he'll", "here", "here's", "hers", "herself", "himself", "how's", 
+    "i'll", "i've", "into", "isn't", "it's", "itself", "let's", "more", "most", 
+    "mustn't", "myself", "once", "only", "other", "ought", "oursourselves", 
+    "over", "same", "shan't", "she'd", "she'll", "she's", "should", "shouldn't", 
+    "some", "such", "than", "that", "that's", "their", "theirs", "them", 
+    "themselves", "then", "there", "there's", "these", "they", "they'd", 
+    "they'll", "they're", "they've", "this", "those", "through", "under", 
+    "until", "very", "wasn't", "we'd", "we'll", "we're", "we've", "were", 
+    "weren't", "what", "what's", "when", "when's", "where", "where's", "which", 
+    "while", "who's", "whom", "why's", "with", "won't", "would", "wouldn't", 
+    "you'd", "you'll", "you're", "you've", "your", "yours", "yourself", "yourselves"
 }
 
 
-# Converting HTML -> Text
-def visible_text_from_html(html: str) -> str:
-    soup = BeautifulSoup(html, "html.parser")
+# Extract readable text
+def visible_text_from_html(soup: BeautifulSoup) -> str:
     for tag in soup(["script", "style", "noscript", "header", "footer", "nav", "aside"]):
         tag.decompose()
 
@@ -27,31 +38,29 @@ def visible_text_from_html(html: str) -> str:
     return text
 
 
-# Tokenization
-def iter_tokens_from_text(text: str):
-    token_chars = []
-    for ch in text:
-        if not ch.isascii():
-            if token_chars:
-                yield "".join(token_chars).lower()
-                token_chars.clear()
-            continue
-
-        if ch.isalnum():
-            token_chars.append(ch)
-        else:
-            if token_chars:
-                yield "".join(token_chars).lower()
-                token_chars.clear()
-
-    if token_chars:
-        yield "".join(token_chars).lower()
-
-
-
 def tokenize_text(text: str, *, min_len: int = 3, remove_stopwords: bool = True) -> list[str]:
+    # Iterator to create individual tokens
+    def iter_tokens_from_text():
+        token_chars = []
+        for ch in text:
+            if not ch.isascii():
+                if token_chars:
+                    yield "".join(token_chars).lower()
+                    token_chars.clear()
+                continue
+
+            if ch.isalnum():
+                token_chars.append(ch)
+            else:
+                if token_chars:
+                    yield "".join(token_chars).lower()
+                    token_chars.clear()
+
+        if token_chars:
+            yield "".join(token_chars).lower()
+
     tokens = []
-    for tok in iter_tokens_from_text(text):
+    for tok in iter_tokens_from_text():
         if len(tok) < min_len:
             continue
         if remove_stopwords and tok in STOP_WORDS:
@@ -95,22 +104,23 @@ def is_near_duplicate(sh: int, *, threshold: int = 4) -> bool:
 
 
 # Combine all filters to check web-pages
-def should_expand_page(html: str, *, simhash_threshold: int = 4) -> bool:
+def should_expand_page(soup: BeautifulSoup, url, *, simhash_threshold: int = 4) -> bool:
     """
     Returns False if the page is thin / duplicate / near-duplicate.
     Updates global seen-sets when the page is accepted.
     """
-    text = visible_text_from_html(html)
+    text = visible_text_from_html(soup)
     tokens = tokenize_text(text)
-
 
     ch = content_checksum(text)
     if ch in SEEN_CONTENT_HASHES:
+        #print(f"CF;Duplicate detected: {url}")						    					# DEBUGGING
         return False
     SEEN_CONTENT_HASHES.add(ch)
 
     sh = simhash(tokens)
     if is_near_duplicate(sh, threshold=simhash_threshold):
+        #print(f"CF;Near-duplicate detected: {url}")											# DEBUGGING
         return False
     SEEN_SIMHASHES.add(sh)
 
