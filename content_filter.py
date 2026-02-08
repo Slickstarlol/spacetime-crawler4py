@@ -29,7 +29,8 @@ STOP_WORDS = {
 
 
 # Extract readable text
-def visible_text_from_html(soup: BeautifulSoup) -> str:
+def visible_text_from_html(html: str) -> str:
+    soup = BeautifulSoup(html, 'html.parser')
     for tag in soup(["script", "style", "noscript", "header", "footer", "nav", "aside"]):
         tag.decompose()
 
@@ -127,12 +128,12 @@ def is_low_information(text: str, tokens: list[str]) -> bool:
     
 
 # Combine all filters to check web-pages
-def should_expand_page(soup: BeautifulSoup, url, *, simhash_threshold: int = 4) -> bool:
+def should_expand_page(html: str, url, *, simhash_threshold: int = 4) -> bool:
     """
     Returns False if the page is thin / duplicate / near-duplicate.
     Updates global seen-sets when the page is accepted.
     """
-    text = visible_text_from_html(soup)
+    text = visible_text_from_html(html)
     tokens = tokenize_text(text)
 
     if is_low_information(text, tokens):

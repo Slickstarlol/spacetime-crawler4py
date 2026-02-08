@@ -20,7 +20,7 @@ BAD_QUERY_KEYS = {"ns", "image", "tab", "tab_files", "tab_details",
 BAD_EXTENSIONS_REGEX = (r".*\.(7z|arff|avi|bib|bin|bmp|bz2|c|cnf|css|csv|"
 						r"dat|data|dll|dmg|doc|docx|eps|epub|exe|h|"
 						r"gif|gz|ico|iso|jar|jpe?g|jpg|js|lif|m4v|mid|"
-						r"mkv|mov|mp2|mp3|mp4|mpeg|msi|mso|names|"
+						r"mkv|mov|mp2|mp3|mp4|mpeg|msi|mso|names|npy|"
 						r"odc|ogg|ogv|pdf|png|ppt|pptx|ps|psd|py|ram|"
 						r"rar|rm|rtf|sas|sha1|smil|swf|tar|tex|tgz|"
 						r"thmx|tiff?|txt|wav|wma|wmv|xls|xlsx|xml|zip)$")
@@ -38,7 +38,7 @@ def scraper(url: str, resp):
 	# Validate response
 	if resp.status != 200 or not resp or not resp.raw_response:
 		return list()
-
+	
 	links = extract_next_links(url, resp)
 	return [link for link in links if is_valid(link)]
 
@@ -59,13 +59,14 @@ def extract_next_links(url, resp) -> list[str]:
 	try:
 		# Decode contents
 		content = resp.raw_response.content
+		# print("Decoding content")
 		if isinstance(content, bytes):
 			# Avoid large or tiny pages (possible traps or dead pages)
 			if len(content) > MAX_PAGE_SIZE:
-				#print(f"Skipping large page: {url} ({len(content)} bytes)")			# DEBUGGING
+				# print(f"Skipping large page: {url} ({len(content)} bytes)")			# DEBUGGING
 				return list()
 			if len(content) < MIN_PAGE_SIZE:
-				#print(f"Skipping tiny page: {url} ({len(content)} bytes) ")			# DEBUGGING
+				# print(f"Skipping tiny page: {url} ({len(content)} bytes) ")			# DEBUGGING
 				return list()
 			
 			try:
@@ -73,36 +74,39 @@ def extract_next_links(url, resp) -> list[str]:
 			except:
 				content = str(content)
 
-		soup = BeautifulSoup(content, 'html.parser')
 
 		# Tokenize and filter webpages for duplicates
-		if not content_filter.should_expand_page(soup, resp.url):
+		if not content_filter.should_expand_page(content, resp.url):
 			return list()
+		
+		soup = BeautifulSoup(content, 'html.parser')
 
 		# Record analytics for this accepted page
-		analytics.record_page(resp.url, content)
+		analytics.record_page(resp.url, content)					# TODO: FIX ANALYTICS
+		# print("Analytics recorded")
+
 		# Get the base URL to resolve relative URLs
 		base_url = resp.url if hasattr(resp, 'url') and resp.url else url
-		
 		for link in soup.find_all('a', href=True):
 			href = link['href'].strip()
-			#print(f"Parsing url {href}")												# DEBUGGING
+			# print(f"Parsing url {href}")												# DEBUGGING
 			
 			# Skip invalid protocols and non-webpage links
 			if href.startswith(("#", "javascript:", "mailto:", "tel:", "data:")):
-				#print("Skipping")														# DEBUGGING
+				# print("Skipping")														# DEBUGGING
 				continue
 
 			absolute_url = urljoin(base_url, href)
 			
 			absolute_url = urldefrag(absolute_url)[0]
-			#print(f"Abs URL: {absolute_url}")											# DEBUGGING
+			# print(f"Added Abs URL: {absolute_url}")											# DEBUGGING
 
 			links.add(absolute_url)
 		
 		return list(links)
 	
-	except Exception:
+	except Exception as e:
+		print(e)
 		return list()
 
 def is_valid(url):
@@ -111,59 +115,59 @@ def is_valid(url):
 	# There are already some conditions that return False.
 	try:
 		if not url or not url.strip():
-			#print("Empty url")															# DEBUGGING
+			# print("Empty url")															# DEBUGGING
 			return False
 		
 		# Reject extremely long urls
 		if len(url) > 200:
-			#print(f"Url too long ({url} {len(url)})")									# DEBUGGING
+			# print(f"Url too long ({url} {len(url)})")									# DEBUGGING
 			return False
 		
 		parsed = urlparse(url)
 		
 		# Check URL scheme
 		if parsed.scheme not in ("http", "https"):
-			#print(f"URL scheme invalid: {url}")											# DEBUGGING
+			# print(f"URL scheme invalid: {url}")											# DEBUGGING
 			return False
 		
 		# Check if the netloc matches valid domain
 		hostname = parsed.hostname
 		if not hostname:
-			print(f"No hostname found for: {url}")
+			# print(f"No hostname found for: {url}")
 			return False
 		domain_valid = any(hostname.endswith(domain) for domain in VALID_DOMAINS)
 		if not domain_valid:
-			#print(f"Invalid domain: {hostname}")												# DEBUGGING
+			# print(f"Invalid domain: {hostname}")												# DEBUGGING
 			return False
 		
 		# Check path depth
 		path_keys = parsed.path.lower().split('/')
 		if len(path_keys) > MAX_PATH_DEPTH:
-			#print(f"Path too long: {url}")												# DEBUGGING
+			# print(f"Path too long: {url}")												# DEBUGGING
 			return False
 		
 		# Check bad path keys for UI pages (login, search, signup, etc...)
 		if any(key in path_keys for key in BAD_PATH_KEYS):
-			print(f"Bad path key: {url}")
+			# print(f"Bad path key: {url}")
 			return False
 
 		# Check for calendar pattern in path
 		calendar_pattern = r'(/\d{4}/){2,}'				# Repeated two repeated /YYYY/... patterns
 		calendar_pattern2 = r'(/\d{4}/\d{2}/\d{2}/)'	# /YYYY/MM/DD
 		if re.search(calendar_pattern, parsed.path) or re.search(calendar_pattern2, parsed.path):
-			#print(f"Calendar detected: {url}")											# DEBUGGING
+			# print(f"Calendar detected: {url}")											# DEBUGGING
 			return False
 		
 		# Check query parameters and actions
 		if parsed.query:
 			params = parse_qs(parsed.query.lower())
 			if any(key in BAD_QUERY_KEYS for key in params):
-				#print(f"Bad query key: {url}")											# DEBUGGING
+				# print(f"Bad query key: {url}")											# DEBUGGING
 				return False
 		
 		# Check file extensions that should not be crawled
 		if re.match(BAD_EXTENSIONS_REGEX, parsed.path.lower()):
-			#print(f"Bad file extension: {url}")											# DEBUGGING
+			# print(f"Bad file extension: {url}")											# DEBUGGING
 			return False
 		
 		return True
