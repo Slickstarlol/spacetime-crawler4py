@@ -1,3 +1,5 @@
+import json
+import os
 from collections import Counter, defaultdict
 from content_filter import visible_text_from_html, tokenize_text
 
@@ -11,6 +13,7 @@ LONGEST_WORD_COUNT = 0
 WORD_FREQ = Counter()
 
 SUBDOMAIN_PAGES = defaultdict(set)
+
 
 
 def remove_fragment(url: str) -> str:
@@ -94,19 +97,64 @@ def subdomain_report():
     )
 
 
-def write_report(path: str = "report.txt") -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(f"Unique pages: {unique_page_count()}\n\n")
+def write_report(path: str = "report.json") -> None:
+    """
+    Serializes the global crawler state to a JSON file.
+    Converts sets to lists to ensure JSON compatibility.
+    """
+    # Create a dictionary representation of the global state
+    state = {
+        "unique_urls": list(UNIQUE_URLS),
+        "longest_page": {
+            "url": LONGEST_URL,
+            "word_count": LONGEST_WORD_COUNT
+        },
+        "word_freq": dict(WORD_FREQ),  # Convert Counter to standard dict
+        # Convert defaultdict(set) to dict(list)
+        "subdomain_pages": {k: list(v) for k, v in SUBDOMAIN_PAGES.items()}
+    }
 
-        url, wc = longest_page()
-        f.write("Longest page (by word count):\n")
-        f.write(f"{url}, {wc}\n\n")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=4)
+        print(f"Report saved to {path}")
+    except Exception as e:
+        print(f"Failed to save report: {e}")
 
-        f.write("Top 50 words:\n")
-        for word, count in top_words(50):
-            f.write(f"{word}, {count}\n")
-        f.write("\n")
+def load_report(path: str = "report.json") -> None:
+    """
+    Loads the JSON report file if it exists and populates the global variables.
+    Converts lists back into sets and dictionaries back into Counters.
+    """
+    global UNIQUE_URLS, LONGEST_URL, LONGEST_WORD_COUNT, WORD_FREQ, SUBDOMAIN_PAGES
 
-        f.write("Subdomains under uci.edu:\n")
-        for sub, count in subdomain_report():
-            f.write(f"{sub}, {count}\n")
+    if not os.path.exists(path):
+        print(f"No previous state found at {path}. Starting fresh.")
+        return
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            state = json.load(f)
+
+        # 1. Restore Unique URLs (List -> Set)
+        UNIQUE_URLS = set(state.get("unique_urls", []))
+
+        # 2. Restore Longest Page
+        longest_page_data = state.get("longest_page", {})
+        LONGEST_URL = longest_page_data.get("url", None)
+        LONGEST_WORD_COUNT = longest_page_data.get("word_count", 0)
+
+        # 3. Restore Word Frequency 
+        WORD_FREQ = Counter(state.get("word_freq", {}))
+
+        # 4. Restore Subdomain Pages
+        subdomain_data = state.get("subdomain_pages", {})
+        SUBDOMAIN_PAGES = defaultdict(set)
+        for subdomain, urls in subdomain_data.items():
+            SUBDOMAIN_PAGES[subdomain] = set(urls)
+
+        print(f"Successfully loaded state from {path}")
+        print(f"Resuming with {len(UNIQUE_URLS)} unique pages and {len(WORD_FREQ)} words.")
+
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        print(f"Error loading report file: {e}. Starting fresh to prevent corruption.")

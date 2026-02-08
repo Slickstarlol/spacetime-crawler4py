@@ -20,9 +20,9 @@ BAD_QUERY_KEYS = {"ns", "image", "tab", "tab_files", "tab_details",
 
 BAD_EXTENSIONS_REGEX = (r".*\.(7z|arff|avi|bib|bin|bmp|bz2|c|cnf|css|csv|"
 						r"dat|data|dll|dmg|doc|docx|eps|epub|exe|h|"
-						r"gif|gz|ico|iso|jar|jpe?g|jpg|js|lif|m4v|mid|"
+						r"gif|gz|ico|iso|jar|jpe?g|jpg|js|json|lif|m4v|mid|"
 						r"mkv|mov|mp2|mp3|mp4|mpeg|msi|mso|names|npy|"
-						r"odc|ogg|ogv|php|pdf|png|ppt|pptx|ps|psd|py|ram|"
+						r"odc|ogg|ogv|php|pdf|png|ppt|pptx|ppsx|pps|ps|psd|py|ram|"
 						r"rar|rm|rtf|sas|sha1|smil|swf|tar|tex|tgz|"
 						r"thmx|tiff?|txt|wav|wma|wmv|xls|xlsx|xml|zip)$")
 
