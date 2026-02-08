@@ -2,29 +2,32 @@ import re
 import hashlib
 from collections import Counter
 from bs4 import BeautifulSoup
+from threading import Lock
 
 # Hash maps
-SEEN_CONTENT_HASHES = set()   # For exact duplicate
-SEEN_SIMHASHES = set()        # For near duplicate
+SEEN_CONTENT_HASHES = set()   # exact duplicates
+SEEN_SIMHASHES = set()        # near duplicates
 
+# One lock for all shared state in this module
+_CF_LOCK = Lock()
 
 # Stop word filtering
 STOP_WORDS = {
     "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "aren't",
-    "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", 
-    "can't", "cannot", "could", "couldn't", "did", "didn't", "do", "does", "doesn't", "doing", "don't", 
-    "down", "during", "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't", "have", 
-    "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here", "here's", "hers", "herself", 
-    "him", "himself", "his", "how", "how's", "i", "i'd", "i'll", "i'm", "i've", "if", "in", "into", 
-    "is", "isn't", "it", "it's", "its", "itself", "let's", "me", "more", "most", "mustn't", "my", 
-    "myself", "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other", "ought", "our", 
-    "oursourselves", "out", "over", "own", "same", "shan't", "she", "she'd", "she'll", "she's", 
-    "should", "shouldn't", "so", "some", "such", "than", "that", "that's", "the", "their", "theirs", 
-    "them", "themselves", "then", "there", "there's", "these", "they", "they'd", "they'll", "they're", 
-    "they've", "this", "those", "through", "to", "too", "under", "until", "up", "very", "was", "wasn't", 
-    "we", "we'd", "we'll", "we're", "we've", "were", "weren't", "what", "what's", "when", "when's", 
-    "where", "where's", "which", "while", "who", "who's", "whom", "why", "why's", "with", "won't", 
-    "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours", "yourself", 
+    "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but", "by",
+    "can't", "cannot", "could", "couldn't", "did", "didn't", "do", "does", "doesn't", "doing", "don't",
+    "down", "during", "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't", "have",
+    "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here", "here's", "hers", "herself",
+    "him", "himself", "his", "how", "how's", "i", "i'd", "i'll", "i'm", "i've", "if", "in", "into",
+    "is", "isn't", "it", "it's", "its", "itself", "let's", "me", "more", "most", "mustn't", "my",
+    "myself", "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other", "ought", "our",
+    "oursourselves", "out", "over", "own", "same", "shan't", "she", "she'd", "she'll", "she's",
+    "should", "shouldn't", "so", "some", "such", "than", "that", "that's", "the", "their", "theirs",
+    "them", "themselves", "then", "there", "there's", "these", "they", "they'd", "they'll", "they're",
+    "they've", "this", "those", "through", "to", "too", "under", "until", "up", "very", "was", "wasn't",
+    "we", "we'd", "we'll", "we're", "we've", "were", "weren't", "what", "what's", "when", "when's",
+    "where", "where's", "which", "while", "who", "who's", "whom", "why", "why's", "with", "won't",
+    "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours", "yourself",
     "yourselves"
 }
 
@@ -99,6 +102,7 @@ def hamming_distance64(a: int, b: int) -> int:
     return (a ^ b).bit_count()
 
 def is_near_duplicate(sh: int, *, threshold: int = 4) -> bool:
+    # NOTE: caller must hold _CF_LOCK if you want this to be consistent
     for prev in SEEN_SIMHASHES:
         if hamming_distance64(sh, prev) <= threshold:
             return True
@@ -106,12 +110,7 @@ def is_near_duplicate(sh: int, *, threshold: int = 4) -> bool:
 
 # For low-information webpages
 def is_low_information(text: str, tokens: list[str]) -> bool:
-    
-    ''' Contemplating whether to restrict text count, due to menu pages
-    if len(text) < 200:
-        return True
-    '''
-    if len(tokens) < 80:
+    if len(tokens) < 40:
         return True
 
     # Check for reptition
@@ -126,13 +125,11 @@ def is_low_information(text: str, tokens: list[str]) -> bool:
         return True
 
     return False
-    
 
-# Combine all filters to check web-pages
 def should_expand_page(html: str, url, *, simhash_threshold: int = 4) -> bool:
     """
-    Returns False if the page is thin / duplicate / near-duplicate.
-    Updates global seen-sets when the page is accepted.
+    Returns False if thin / duplicate / near-duplicate.
+    Thread-safe updates of seen sets.
     """
     text = visible_text_from_html(html)
     tokens = tokenize_text(text)
@@ -141,15 +138,16 @@ def should_expand_page(html: str, url, *, simhash_threshold: int = 4) -> bool:
         return False
 
     ch = content_checksum(text)
-    if ch in SEEN_CONTENT_HASHES:
-        #print(f"CF;Duplicate detected: {url}")						    					# DEBUGGING
-        return False
-    SEEN_CONTENT_HASHES.add(ch)
-
     sh = simhash(tokens)
-    if is_near_duplicate(sh, threshold=simhash_threshold):
-        #print(f"CF;Near-duplicate detected: {url}")											# DEBUGGING
-        return False
-    SEEN_SIMHASHES.add(sh)
+
+    # Atomic check+add
+    with _CF_LOCK:
+        if ch in SEEN_CONTENT_HASHES:
+            return False
+        if is_near_duplicate(sh, threshold=simhash_threshold):
+            return False
+
+        SEEN_CONTENT_HASHES.add(ch)
+        SEEN_SIMHASHES.add(sh)
 
     return True
