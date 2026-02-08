@@ -15,13 +15,14 @@ MAX_QUERY_LEN = 5
 BAD_QUERY_KEYS = {"ns", "image", "tab", "tab_files", "tab_details", 
 				  "do", "diff", "sort", "filter", "view", "action",
 				  "auth", "from", "precision", "token", "filter",
-				  "search", "share", "outlook-cal", "ical", "keywords"}
+				  "search", "share", "outlook-cal", "ical", "keywords",
+				  "redirect_to"}
 
 BAD_EXTENSIONS_REGEX = (r".*\.(7z|arff|avi|bib|bin|bmp|bz2|c|cnf|css|csv|"
 						r"dat|data|dll|dmg|doc|docx|eps|epub|exe|h|"
 						r"gif|gz|ico|iso|jar|jpe?g|jpg|js|lif|m4v|mid|"
 						r"mkv|mov|mp2|mp3|mp4|mpeg|msi|mso|names|npy|"
-						r"odc|ogg|ogv|pdf|png|ppt|pptx|ps|psd|py|ram|"
+						r"odc|ogg|ogv|php|pdf|png|ppt|pptx|ps|psd|py|ram|"
 						r"rar|rm|rtf|sas|sha1|smil|swf|tar|tex|tgz|"
 						r"thmx|tiff?|txt|wav|wma|wmv|xls|xlsx|xml|zip)$")
 
@@ -36,7 +37,7 @@ VALID_DOMAINS = [
 
 def scraper(url: str, resp):
 	# Validate response
-	if resp.status != 200 or not resp or not resp.raw_response:
+	if resp.status != 200 or not resp or not resp.raw_response or not resp.raw_response.content:
 		return list()
 	
 	links = extract_next_links(url, resp)
