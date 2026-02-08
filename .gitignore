@@ -109,3 +109,4 @@ venv.bak/
 *.full.py
 *.shelve
 *.pdf
+*.json
