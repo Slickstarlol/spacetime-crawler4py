@@ -27,10 +27,10 @@ BAD_EXTENSIONS_REGEX = (r".*\.(7z|arff|avi|bib|bin|bmp|bz2|c|cnf|css|csv|"
 						r"thmx|tiff?|txt|wav|wma|wmv|xls|xlsx|xml|zip)$")
 
 VALID_DOMAINS = [
-			r'ics.uci.edu',
-			r'cs.uci.edu',
-			r'informatics.uci.edu',
-			r'stat.uci.edu'
+			r'.ics.uci.edu',
+			r'.cs.uci.edu',
+			r'.informatics.uci.edu',
+			r'.stat.uci.edu'
 		]
 
 
