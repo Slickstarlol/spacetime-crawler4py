@@ -2,7 +2,7 @@ import json
 
 def read_json_file(file_path: str) -> dict:
     """
-    Reads a JSON file and returns its contents as a dictionary.
+    Reads report file and returns its contents as a dictionary.
     """
     with open(file_path, 'r') as f:
         data = json.load(f)
@@ -11,35 +11,49 @@ def read_json_file(file_path: str) -> dict:
 
 def get_count_unique_urls(data: dict) -> int:
     """
-    Extracts unique URLs from the provided data dictionary.
+    Extracts unique URLs from data dictionary.
     """
     return len(set(data.get("unique_urls", [])))
 
 def get_longest_page_info(data: dict) -> tuple:
     """
-    Extracts the longest page information (URL and word count) from the provided data dictionary.
+    Extracts  longest page information (URL, word count) from data dictionary.
     """
     longest_page = data.get("longest_page", {})
     return longest_page.get("url", ""), longest_page.get("word_count", 0)
 
 def get_50_most_common_words(data: dict) -> list:
     """
-    Extracts the 50 most common words from the provided data dictionary.
+    Extracts 50 most common words from data dictionary.
     """
     word_freq = data.get("word_freq", {})
     return sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:50]
 
 def get_subdomain_report(data: dict) -> list:   
     """
-    Extracts the subdomain report from the provided data dictionary.
-    Returns a sorted list of (subdomain, count) tuples.
+    Extracts the subdomain report from data dictionary.
+    Returns sorted list of (subdomain, count) tuples.
     """
     subdomain_pages = data.get("subdomain_pages", {})
     return sorted(((sub, len(urls)) for sub, urls in subdomain_pages.items()), key=lambda x: x[0])
 
 def write_report(data: dict, path: str = "report.txt") -> None:
     """
-    Writes a formatted report containing crawl statistics to a text file.
+    Writes report containing crawl statistics to a text file.
+
+    Unique Pages:
+    (count)
+
+    Longest page:
+    (url)
+    (word count)
+
+    50 Most Common Words:
+    (word: count)
+
+    Unique subdomains:
+    (subdomain, # of unique pages)
+    ...
     """
     try:
         with open(path, "w", encoding="utf-8") as f:

@@ -65,6 +65,7 @@ def tokenize_text(text: str, *, min_len: int = 3, remove_stopwords: bool = True)
     for tok in iter_tokens_from_text():
         if len(tok) < min_len:
             continue
+        # Exclude stopwords from tokens
         if remove_stopwords and tok in STOP_WORDS:
             continue
         tokens.append(tok)
