@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import content_filter
 import analytics
 
+# Global variables
 MAX_PAGE_SIZE = 10 * 1024 * 1024    # 10 MB
 MIN_PAGE_SIZE = 100                 # 100 bytes
 
@@ -60,7 +61,6 @@ def extract_next_links(url, resp) -> list[str]:
 	try:
 		# Decode contents
 		content = resp.raw_response.content
-		# print("Decoding content")
 		if isinstance(content, bytes):
 			# Avoid large or tiny pages (possible traps or dead pages)
 			if len(content) > MAX_PAGE_SIZE:
@@ -86,22 +86,23 @@ def extract_next_links(url, resp) -> list[str]:
 		analytics.record_page(resp.url, content)					# TODO: FIX ANALYTICS
 		# print("Analytics recorded")
 
-		# Get the base URL to resolve relative URLs
 		base_url = resp.url if hasattr(resp, 'url') and resp.url else url
+		
+        # Extract all href links in <a> tags
 		for link in soup.find_all('a', href=True):
 			href = link['href'].strip()
 			# print(f"Parsing url {href}")												# DEBUGGING
 			
-			# Skip invalid protocols and non-webpage links
+			# Skip invalid protocols and fragments
 			if href.startswith(("#", "javascript:", "mailto:", "tel:", "data:")):
 				# print("Skipping")														# DEBUGGING
 				continue
-
+            
+            # Resolve relative URLs
 			absolute_url = urljoin(base_url, href)
-			
 			absolute_url = urldefrag(absolute_url)[0]
-			# print(f"Added Abs URL: {absolute_url}")											# DEBUGGING
-
+			
+            # print(f"Added Abs URL: {absolute_url}")											# DEBUGGING
 			links.add(absolute_url)
 		
 		return list(links)
@@ -115,6 +116,7 @@ def is_valid(url):
 	# If you decide to crawl it, return True; otherwise return False.
 	# There are already some conditions that return False.
 	try:
+		# Empty url check
 		if not url or not url.strip():
 			# print("Empty url")															# DEBUGGING
 			return False
@@ -152,7 +154,7 @@ def is_valid(url):
 			# print(f"Bad path key: {url}")
 			return False
 
-		# Check for calendar pattern in path
+		# Check for calendar patterns in path
 		calendar_pattern = r'(/\d{4}/){2,}'				# Repeated two repeated /YYYY/... patterns
 		calendar_pattern2 = r'(/\d{4}/\d{2}/\d{2}/)'	# /YYYY/MM/DD
 		if re.search(calendar_pattern, parsed.path) or re.search(calendar_pattern2, parsed.path):
@@ -166,7 +168,7 @@ def is_valid(url):
 				# print(f"Bad query key: {url}")											# DEBUGGING
 				return False
 		
-		# Check file extensions that should not be crawled
+		# Check file extensions that should not be downloaded
 		if re.match(BAD_EXTENSIONS_REGEX, parsed.path.lower()):
 			# print(f"Bad file extension: {url}")											# DEBUGGING
 			return False
