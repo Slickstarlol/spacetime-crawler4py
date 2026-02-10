@@ -83,8 +83,14 @@ def _hash64(token: str) -> int:
     return int.from_bytes(d[:8], "big", signed=False)
 
 def simhash(tokens: list[str]) -> int:
+    # Dictionary to create frequencies
     counts = Counter(tokens)
     v = [0] * 64
+
+    '''
+    Create a hash. Add weights to determine hash score.
+
+    '''
     for tok, w in counts.items():
         h = _hash64(tok)
         for i in range(64):
@@ -93,11 +99,13 @@ def simhash(tokens: list[str]) -> int:
     out = 0
     for i in range(64):
         if v[i] > 0:
-            out |= (1 << i)
+            out |= (1 << i) # Determine duplication threshold
     return out
 
+# XOR Comparison. If bits are the same, return 0. Else: 1.
 def hamming_distance64(a: int, b: int) -> int:
     return (a ^ b).bit_count()
+
 
 def is_near_duplicate(sh: int, *, threshold: int = 4) -> bool:
     for prev in SEEN_SIMHASHES:
